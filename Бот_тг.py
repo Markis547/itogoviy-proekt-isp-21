@@ -6,7 +6,7 @@ from telegram.ext import (Application,CommandHandler,MessageHandler,CallbackQuer
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-TOKEN = '8345086336:AAHA23WJ6Ykhu5GiQ6adtYS_14J2pPZ1rK8'
+TOKEN = ''
 
 # СОЗДАНИЕ БД
 def init_db():
@@ -73,4 +73,5 @@ def main():
 
 if __name__ == '__main__':
     main()
+
 
