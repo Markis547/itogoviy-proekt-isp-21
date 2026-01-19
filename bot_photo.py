@@ -1,50 +1,75 @@
-import telegram.ext
-from telegram import Update
-from telegram.ext import Application, MessageHandler, ContextTypes
-import os
-TOKEN = '8582184651:AAH45iNf6IPtqP7mjxEOKW6us8mQAD0NCyY'
-from telegram import Bot
-bot = Bot(token=TOKEN)
+import sqlite3
+import logging
+from telegram import Update, ReplyKeyboardMarkup, InlineKeyboardMarkup, InlineKeyboardButton
+from telegram.ext import (Application,CommandHandler,MessageHandler,CallbackQueryHandler,filters,ContextTypes)
 
-async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    print(context.args)
-    if not update.message or not update.message.photo:
-        return
-    file_id = update.message.photo[-1].file_id
-    new_file = await context.bot.get_file(file_id)
-    print(context.args)
-    destination_folder = 'images'
-    if not os.path.exists(destination_folder):
-        os.makedirs(destination_folder)
-    file_name = f"{file_id}.jpg"
-    destination_path = os.path.join(destination_folder, file_name)
+logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
+logger = logging.getLogger(__name__)
 
-    try:
-        await new_file.download_to_drive(custom_path=destination_path)
-        # Также используем await для отправки ответа
-        await update.message.reply_text("Фотография успешно получена и сохранена!")
-    except Exception as e:
-        await update.message.reply_text(f"Произошла ошибка при скачивании файла: {e}")
-async def Himessage(update, context):
-    user_id = update.effective_chat.id
+TOKEN = '8345086336:AAHA23WJ6Ykhu5GiQ6adtYS_14J2pPZ1rK8'
 
-    # Мы отвечаем в тот же чат, откуда пришло сообщение
-    await context.bot.send_message(
-        chat_id=user_id, 
-        text="Я получил ваше сообщение!"
+# СОЗДАНИЕ БД
+def init_db():
+    conn = sqlite3.connect('NameUser.db')
+    cursor = conn.cursor()
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS Name (
+        id INTEGER PRIMARY KEY,
+        Username TEXT NOT NULL
     )
+    ''')
+    conn.commit()
+    conn.close()
+
+init_db()
+
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # Получаем данные пользователя
+    user_id = update.effective_user.id
+    username = update.effective_user.username if update.effective_user.username else "Unknown"
+
+    # РАБОТА С БД: открываем, записываем, закрываем
+    conn = sqlite3.connect('NameUser.db')
+    cursor = conn.cursor()
+    cursor.execute('INSERT OR REPLACE INTO Name (id, Username) VALUES (?, ?)', (user_id, username))
+    conn.commit()
+    conn.close() # Теперь ошибка 'Unresolved reference' исчезнет, так как conn создана выше
+
+    keyboard = [["Продавец", "Покупатель"]]
+    reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+
+    await update.message.reply_text(
+        f"Добро пожаловать, {username}! Выберите действие:",
+        reply_markup=reply_markup
+    )
+
+async def handle_buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    text = update.message.text
+    if text == "Продавец":
+        await update.message.reply_text("Вы выбрали режим продавца")
+    elif text == "Покупатель":
+        keyboard = [
+            [InlineKeyboardButton("📱 Электроника", callback_data="cat_elec")],
+            [InlineKeyboardButton("👕 Одежда", callback_data="cat_cloth")],
+            [InlineKeyboardButton("🏠 Дом", callback_data="cat_home")]
+        ]
+        await update.message.reply_text("Выберите категорию товаров:", reply_markup=InlineKeyboardMarkup(keyboard))
+
+async def handle_inline_buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    await query.edit_message_text(f"Вы выбрали: {query.data}")
 
 def main():
-    
+    # Создаем приложение (ApplicationBuilder актуален для 2026 года)
     application = Application.builder().token(TOKEN).build()
-    photo_handler = MessageHandler(telegram.ext.filters.PHOTO, handle_photo)
-    application.add_handler(photo_handler)
 
-    # 4. Запускаем бота
-    application.run_polling(
-        poll_interval=3, 
-        on_startup=Himessage # <- Вот здесь мы вызываем функцию при старте
-    )
+    application.add_handler(CommandHandler("start", start))
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_buttons))
+    application.add_handler(CallbackQueryHandler(handle_inline_buttons))
+
+    print("Бот запущен...")
+    application.run_polling()
 
 if __name__ == '__main__':
     main()
