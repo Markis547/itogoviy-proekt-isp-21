@@ -17,7 +17,6 @@ from telegram.ext import (
 #  ТОКЕН
 TOKEN = ""
 
-
 # БАЗА ДАННЫХ (SQLite)
 
 
@@ -58,7 +57,6 @@ CREATE TABLE IF NOT EXISTS history (
 
 db.commit()
 
-
 # КЛАВИАТУРЫ
 
 
@@ -86,17 +84,15 @@ buyer_kb = ReplyKeyboardMarkup(
 )
 
 profile_kb = ReplyKeyboardMarkup(
-    [["🔙 Назад"]],
+    [["🚪 Выйти", "🔙 Назад"]],
     resize_keyboard=True
 )
-
 
 # СОСТОЯНИЯ
 
 
 state = {}
 temp = {}
-
 
 
 # /start
@@ -125,7 +121,23 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     s = state.get(uid)
 
     if text == "🔙 Назад":
-        await start(update, context)
+        if s == "seller":
+            state[uid] = None
+            await update.message.reply_text("Выберите режим:", reply_markup=main_kb)
+        elif s == "buyer":
+            state[uid] = None
+            await update.message.reply_text("Выберите режим:", reply_markup=main_kb)
+        else:
+            await update.message.reply_text("Выберите режим:", reply_markup=main_kb)
+        return
+
+    #  ВЫХОД ИЗ АККАУНТА 
+    if text == "🚪 Выйти":
+        state[uid] = None
+        await update.message.reply_text(
+            "Вы вышли из аккаунта",
+            reply_markup=start_kb
+        )
         return
 
     #  РЕГИСТРАЦИЯ 
@@ -313,7 +325,7 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     #  ТОВАРЫ 
     if s == "buyer" and text == "📦 Смотреть товары":
         cur.execute(
-            "SELECT id,name,description,price,photo FROM products WHERE seller_id!=?",
+            "SELECT id,name,description,price,photo,seller_id FROM products WHERE seller_id!=?",
             (uid,)
         )
         rows = cur.fetchall()
@@ -323,13 +335,17 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
 
         for r in rows:
+            # Получаем username продавца
+            cur.execute("SELECT username FROM users WHERE user_id=?", (r[5],))
+            seller_username = cur.fetchone()[0]
+
             kb = InlineKeyboardMarkup([
-                [InlineKeyboardButton("📞 Связаться", callback_data=f"buy_{r[0]}")]
+                [InlineKeyboardButton("📞 Связаться", callback_data=f"contact_{r[5]}")]
             ])
             await context.bot.send_photo(
                 uid,
                 r[4],
-                caption=f"{r[1]}\n{r[2]}\n💰 {r[3]} ₽",
+                caption=f"{r[1]}\n{r[2]}\n💰 {r[3]} ₽\n👤 Продавец: @{seller_username}",
                 reply_markup=kb
             )
 
@@ -374,6 +390,7 @@ async def photo_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # CALLBACK
 
+
 async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
     await q.answer()
@@ -383,6 +400,12 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         cur.execute("DELETE FROM products WHERE id=?", (pid,))
         db.commit()
         await q.message.edit_caption("Товар удалён")
+
+    if q.data.startswith("contact_"):
+        seller_id = int(q.data.split("_")[1])
+        cur.execute("SELECT username FROM users WHERE user_id=?", (seller_id,))
+        seller_username = cur.fetchone()[0]
+        await q.message.reply_text(f"👤 Продавец: @{seller_username}")
 
     if q.data.startswith("buy_"):
         pid = int(q.data.split("_")[1])
@@ -419,6 +442,7 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # ЗАПУСК
 
+
 app = ApplicationBuilder().token(TOKEN).build()
 
 app.add_handler(CommandHandler("start", start))
@@ -428,9 +452,3 @@ app.add_handler(CallbackQueryHandler(callback_handler))
 
 print("Бот запущен")
 app.run_polling()
-    
-
-
-
-
-
